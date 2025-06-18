@@ -1,0 +1,1 @@
+# coin-whisperer-forecast-server
