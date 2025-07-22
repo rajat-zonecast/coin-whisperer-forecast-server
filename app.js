@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -52,6 +53,38 @@ app.post("/save-email", (req, res) => {
       });
     });
   });
+});
+
+app.post("/get-ai-predction", async (req, res) => {
+  const { Prompt } = req.body;
+  console.log("Received technical prompt:", Prompt);
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.AI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: Prompt }],
+            },
+          ],
+        }),
+      }
+    );
+    console.log("Response status:", response);
+    if (response) {
+      return res.json({
+        message: "AI prediction received successfully",
+        data: await response.json(),
+      });
+    }
+  } catch (error) {
+    console.error("Error fetching AI prediction:", error);
+    return res.status(500).json({ error: "Failed to fetch AI prediction" });
+  }
 });
 
 // 404 handler
