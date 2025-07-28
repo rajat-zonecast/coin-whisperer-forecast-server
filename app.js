@@ -56,13 +56,16 @@ app.post("/save-email", (req, res) => {
 });
 
 app.get("/get-emails", (req, res) => {
-  const filePath = path.join(__dirname, "email.json");
+  const password = req.headers["x-access-password"];
+  const correctPassword = "eyqw123@#PumpParade.com"; // Change this to something private
 
+  if (password !== correctPassword) {
+    return res.status(401).json({ error: "Unauthorized: Invalid password" });
+  }
+
+  const filePath = path.join(__dirname, "email.json");
   fs.readFile(filePath, "utf8", (err, data) => {
-    if (err) {
-      console.error("Read error:", err);
-      return res.status(500).json({ error: "Failed to read emails" });
-    }
+    if (err) return res.status(500).json({ error: "Failed to read emails" });
 
     try {
       const emails = JSON.parse(data);
