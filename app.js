@@ -55,6 +55,24 @@ app.post("/save-email", (req, res) => {
   });
 });
 
+app.get("/get-emails", (req, res) => {
+  const filePath = path.join(__dirname, "email.json");
+
+  fs.readFile(filePath, "utf8", (err, data) => {
+    if (err) {
+      console.error("Read error:", err);
+      return res.status(500).json({ error: "Failed to read emails" });
+    }
+
+    try {
+      const emails = JSON.parse(data);
+      res.json(emails);
+    } catch {
+      res.status(500).json({ error: "Corrupted email file" });
+    }
+  });
+});
+
 app.post("/get-ai-predction", async (req, res) => {
   const { Prompt } = req.body;
   console.log("Received technical prompt:", Prompt);
