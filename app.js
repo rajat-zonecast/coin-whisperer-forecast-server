@@ -175,39 +175,50 @@ app.get("/api/technicalindicators", async (req, res) => {
 });
 
 app.get("/api/cryptos", async (req, res) => {
-  const queryParams = new URLSearchParams({
-    vs_currency: "usd",
-    order: "market_cap_desc",
-    per_page: "200",
-    page: "1",
-    sparkline: "false",
-    price_change_percentage: "24h,7d,30d",
-  });
+  const perPage = 250; // CoinGecko max limit
+  const totalTokens = 1000; // how many you want
+  const pages = Math.ceil(totalTokens / perPage);
 
   try {
-    const response = await fetch(
-      `https://pro-api.coingecko.com/api/v3/coins/markets?${queryParams.toString()}`,
-      {
-        headers: {
-          accept: "application/json",
-          "x-cg-pro-api-key": process.env.COINGECKO_KEY, // secure header
-        },
-      }
-    );
+    let allData = [];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`CoinGecko error ${response.status}:`, errorText);
-      return res.status(response.status).json({ error: errorText });
+    for (let page = 1; page <= pages; page++) {
+      const queryParams = new URLSearchParams({
+        vs_currency: "usd",
+        order: "market_cap_desc",
+        per_page: perPage.toString(),
+        page: page.toString(),
+        sparkline: "false",
+        price_change_percentage: "24h,7d,30d",
+      });
+
+      const response = await fetch(
+        `https://pro-api.coingecko.com/api/v3/coins/markets?${queryParams.toString()}`,
+        {
+          headers: {
+            accept: "application/json",
+            "x-cg-pro-api-key": process.env.COINGECKO_KEY,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`CoinGecko error ${response.status}:`, errorText);
+        return res.status(response.status).json({ error: errorText });
+      }
+
+      const data = await response.json();
+      allData = allData.concat(data);
     }
 
-    const data = await response.json();
-    res.json(data);
+    res.json(allData.slice(0, totalTokens)); // trim to exactly 1000 if needed
   } catch (err) {
     console.error("Error fetching CoinGecko Pro data:", err);
     res.status(500).json({ error: "Failed to fetch crypto data" });
   }
 });
+
 
 app.get("/api/token-info/:tokenId", async (req, res) => {
   const tokenId = req.params.tokenId;
