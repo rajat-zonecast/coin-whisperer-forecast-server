@@ -9,7 +9,7 @@ const { v4: uuidv4 } = require("uuid");
 const cors = require("cors");
 const axios = require("axios");
 const socketIo = require("socket.io");
-const {getHoldings} = require("./services/holdings.js")
+const { getHoldings } = require("./services/holdings.js");
 const { startCron } = require("./cron.js");
 
 const app = express();
@@ -265,24 +265,25 @@ app.get("/api/cryptos", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch crypto data" });
   }
 });
-app.get('/api/alerts', (req, res) => {
+app.get("/api/alerts", (req, res) => {
+  const { address } = req.query;
   const pathname = path.join(__dirname, "alerts.json");
 
-  fs.readFile(pathname, 'utf8', (err, data) => {
+  fs.readFile(pathname, "utf8", (err, data) => {
     if (err) {
-      console.error('Error reading file:', err);
+      console.error("Error reading file:", err);
       return;
     }
 
     let parsedAlerts = JSON.parse(data) ?? [];
-    parsedAlerts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const filteredAlerts = parsedAlerts.filter(e=> e?.walletAddress === address).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return res.status(200).json({
-      message: 'Alerts fetched successfully',
-      data: parsedAlerts
-    })
+      message: "Alerts fetched successfully",
+      data: filteredAlerts,
+    });
   });
-})
+});
 
 app.get("/api/token-info/:tokenId", async (req, res) => {
   const tokenId = req.params.tokenId;
@@ -1110,18 +1111,18 @@ const ALERTS_FILE = path.join(__dirname, "alerts.json");
 
 app.post("/api/saveAlert", async (req, res) => {
   try {
-    const
-      { id,
-        type,
-        asset,
-        isActive,
-        condition,
-        threshold,
-        message,
-        targetAsset,
-        walletAddress,
-        chainId
-      } = req.body;
+    const {
+      id,
+      type,
+      asset,
+      isActive,
+      condition,
+      threshold,
+      message,
+      targetAsset,
+      walletAddress,
+      chainId,
+    } = req.body;
 
     // Validation
     if (!type || !condition || !message) {
@@ -1180,9 +1181,7 @@ app.post("/api/saveAlert", async (req, res) => {
     await writeAlerts(alerts);
 
     return res.json({
-      message: id
-        ? "Alert updated successfully"
-        : "Alert created successfully",
+      message: id ? "Alert updated successfully" : "Alert created successfully",
       alert,
     });
   } catch (error) {
@@ -1190,7 +1189,6 @@ app.post("/api/saveAlert", async (req, res) => {
     return res.status(500).json({ error: "Internal Server Error" });
   }
 });
-
 
 /**
  * Utility to read alerts.json
