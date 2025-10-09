@@ -1,0 +1,30 @@
+[
+  {
+    "id": "c5dc5c69-749b-44d9-b6ac-f3ed48a46327",
+    "type": "price",
+    "asset": "eth",
+    "condition": "below",
+    "threshold": 122980,
+    "isActive": true,
+    "message": "eth price below $122980",
+    "walletAddress": "0x47c11d4AFC743b06716b2d612f2B6032Ab51Dc38",
+    "createdAt": "2025-10-09T05:08:12.766Z",
+    "targetAsset": null,
+    "chainId": 1,
+    "updatedAt": "2025-10-09T05:28:42.219Z"
+  },
+  {
+    "id": "169636bb-0919-475b-99b9-a40bb3fe2182",
+    "type": "portfolio",
+    "asset": "BTC",
+    "condition": "above",
+    "threshold": 120,
+    "isActive": true,
+    "message": "Portfolio above 120%",
+    "targetAsset": null,
+    "walletAddress": "0x47c11d4AFC743b06716b2d612f2B6032Ab51Dc38",
+    "chainId": 1,
+    "createdAt": "2025-10-09T05:28:32.678Z",
+    "updatedAt": "2025-10-09T05:34:22.826Z"
+  }
+]
