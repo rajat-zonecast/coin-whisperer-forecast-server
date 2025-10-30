@@ -19,8 +19,10 @@ const getHoldings = async (walletAddress, chainId, currency = "usd") => {
       const res = await fetch(
         `${COVALENT_BASE_URL}/${chainId}/address/${walletAddress}/balances_v2/?key=${COVALENT_API_KEY}&quote-currency=${currency}`
       );
-  
+      
       const result = await res.json();
+      console.log("Covalent Api key:", COVALENT_API_KEY);
+      console.log("Covalent API response:", result);
       if (!result || !result.data || !result.data.items) return [];
   
       const holdings = result.data.items.map((t) => {
