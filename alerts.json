@@ -26,5 +26,44 @@
     "chainId": 1,
     "createdAt": "2025-10-09T05:28:32.678Z",
     "updatedAt": "2025-10-09T05:34:22.826Z"
+  },
+  {
+    "id": "af909772-d3f9-4931-a8d6-9dddc6d59aeb",
+    "type": "volume",
+    "asset": "xrp",
+    "condition": "below",
+    "threshold": 100000000,
+    "isActive": true,
+    "message": "xrp volume below $100000000",
+    "targetAsset": null,
+    "walletAddress": "0x3a4Db259B1A5458eA5B94D167631f8D8b1ECC1Ed",
+    "chainId": 1,
+    "createdAt": "2025-10-09T07:58:53.599Z"
+  },
+  {
+    "id": "e2c9a00f-0fc5-4e4d-8d26-66dc3a8ea2bb",
+    "type": "pair",
+    "asset": "bnb",
+    "condition": "below",
+    "threshold": "",
+    "isActive": true,
+    "message": "bnb price below btc",
+    "targetAsset": "btc",
+    "walletAddress": "0x3a4Db259B1A5458eA5B94D167631f8D8b1ECC1Ed",
+    "chainId": 1,
+    "createdAt": "2025-10-09T08:00:16.377Z"
+  },
+  {
+    "id": "91c73a80-af9e-4499-9ef3-f906e7f73921",
+    "type": "price",
+    "asset": "btc",
+    "condition": "above",
+    "threshold": 1000,
+    "isActive": true,
+    "message": "btc price above $1000",
+    "targetAsset": null,
+    "walletAddress": "0x3a4Db259B1A5458eA5B94D167631f8D8b1ECC1Ed",
+    "chainId": 1,
+    "createdAt": "2025-10-09T08:05:49.704Z"
   }
 ]

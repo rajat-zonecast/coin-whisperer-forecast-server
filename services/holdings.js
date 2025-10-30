@@ -2,8 +2,8 @@
 const holdingsCache = {};
 const CACHE_TTL = 1000 * 60 * 60 * 5; // ✅ 5 hours
 
-const COVALENT_API_KEY = "cqt_rQ4jXgc4C97g3h96qqVtR8ctHwbJ"; // Replace with your Covalent key
-const COVALENT_BASE_URL = "https://api.covalenthq.com/v1";
+const COVALENT_API_KEY= process.env.COVALENT_API_KEY;
+const COVALENT_BASE_URL= process.env.COVALENT_BASE_URL;
 
 const getHoldings = async (walletAddress, chainId, currency = "usd") => {
     const cacheKey = `${walletAddress}_${chainId}_${currency}`;

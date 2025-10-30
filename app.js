@@ -11,9 +11,12 @@ const axios = require("axios");
 const socketIo = require("socket.io");
 const { getHoldings } = require("./services/holdings.js");
 const { startCron } = require("./cron.js");
+const { startNotificationScheduler } = require("./notificationScheduler");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const COVALENT_API_KEY= process.env.COVALENT_API_KEY;
+const COVALENT_BASE_URL= process.env.COVALENT_BASE_URL;
 
 // Middleware
 app.use(express.json());
@@ -342,8 +345,7 @@ app.get("/api/token-info/:tokenId", async (req, res) => {
 
 /////////////// Portfolio endpoint  To fetch all the portfolio data using COVALENT API
 
-const COVALENT_API_KEY = "cqt_rQ4jXgc4C97g3h96qqVtR8ctHwbJ"; // Replace with your Covalent key
-const COVALENT_BASE_URL = "https://api.covalenthq.com/v1";
+
 
 // Helper: Map symbols to CoinGecko IDs dynamically
 let coinGeckoCache = null;
@@ -543,7 +545,7 @@ const fetchTokenPriceUSD = async ({
       contractAddress,
       tickerSymbol,
       isEth,
-    });
+    }); 
     return 0;
   }
 };
@@ -1244,7 +1246,7 @@ io.on("connection", (socket) => {
 });
 
 startCron(app);
-
+startNotificationScheduler(app);
 server.listen(PORT, () => {
   console.log(`Server is listening on port ${PORT}`);
 });
