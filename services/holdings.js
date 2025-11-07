@@ -10,18 +10,16 @@ const getHoldings = async (walletAddress, chainId, currency = "usd") => {
     const now = Date.now();
   
     // ✅ Serve cached data if still valid
-    if (holdingsCache[cacheKey] && holdingsCache[cacheKey].expiry > now) {
-      //console.log("Serving from cache:", cacheKey);
-      return holdingsCache[cacheKey].data;
-    }
+    // if (holdingsCache[cacheKey] && holdingsCache[cacheKey].expiry > now) {
+    //   //console.log("Serving from cache:", cacheKey);
+    //   return holdingsCache[cacheKey].data;
+    // }
   
     try {
       const res = await fetch(
         `${COVALENT_BASE_URL}/${chainId}/address/${walletAddress}/balances_v2/?key=${COVALENT_API_KEY}&quote-currency=${currency}`
-      );
-      
+      );      
       const result = await res.json();
-      console.log("Covalent Api key:", COVALENT_API_KEY);
       console.log("Covalent API response:", result);
       if (!result || !result.data || !result.data.items) return [];
   
@@ -45,10 +43,10 @@ const getHoldings = async (walletAddress, chainId, currency = "usd") => {
       });
   
       // ✅ Save to cache with 5-hour expiry
-      holdingsCache[cacheKey] = {
-        data: holdings,
-        expiry: now + CACHE_TTL,
-      };
+      // holdingsCache[cacheKey] = {
+      //   data: holdings,
+      //   expiry: now + CACHE_TTL,
+      // };
   
       return holdings;
     } catch (error) {

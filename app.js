@@ -15,8 +15,8 @@ const { startNotificationScheduler } = require("./notificationScheduler");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const COVALENT_API_KEY= process.env.COVALENT_API_KEY;
-const COVALENT_BASE_URL= process.env.COVALENT_BASE_URL;
+const COVALENT_API_KEY = process.env.COVALENT_API_KEY;
+const COVALENT_BASE_URL = process.env.COVALENT_BASE_URL;
 
 // Middleware
 app.use(express.json());
@@ -103,7 +103,6 @@ app.post("/get-ai-predction", async (req, res) => {
         }),
       }
     );
-    //console.log("Response status:", response);
     if (response) {
       return res.json({
         message: "AI prediction received successfully",
@@ -279,7 +278,9 @@ app.get("/api/alerts", (req, res) => {
     }
 
     let parsedAlerts = JSON.parse(data) ?? [];
-    const filteredAlerts = parsedAlerts.filter(e=> e?.walletAddress === address).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const filteredAlerts = parsedAlerts
+      .filter((e) => e?.walletAddress === address)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return res.status(200).json({
       message: "Alerts fetched successfully",
@@ -292,8 +293,6 @@ app.get("/api/token-info/:tokenId", async (req, res) => {
   const tokenId = req.params.tokenId;
 
   try {
-    //console.log(`Fetching token info for: ${tokenId}`);
-
     const response = await fetch(
       `https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(
         tokenId
@@ -344,8 +343,6 @@ app.get("/api/token-info/:tokenId", async (req, res) => {
 });
 
 /////////////// Portfolio endpoint  To fetch all the portfolio data using COVALENT API
-
-
 
 // Helper: Map symbols to CoinGecko IDs dynamically
 let coinGeckoCache = null;
@@ -545,7 +542,7 @@ const fetchTokenPriceUSD = async ({
       contractAddress,
       tickerSymbol,
       isEth,
-    }); 
+    });
     return 0;
   }
 };
@@ -660,29 +657,132 @@ const getTransactions = async (walletAddress, chainId) => {
   }
 };
 
+
 const symbolToIdMap = {
   ETH: "ethereum",
+  MATIC: "matic-network",
+  ARB: "arbitrum",
+  OP: "optimism",
+  BNB: "binancecoin",
+  AVAX: "avalanche-2",
+  FTM: "fantom",
+  GLMR: "moonbeam",
+  SOL: "solana",
+  NEAR: "near",
+  LUNA: "terra-luna-2", // for current Terra 2.0
+  APT: "aptos",
+  ATOM: "cosmos",
   USDC: "usd-coin",
   DAI: "dai",
-  LINK: "chainlink",
-  MATIC: "matic-network",
-  // add more as needed
+  LINK: "chainlink"
 };
+
+
+// --- Concentration Risk Calculation Function ---
+function calculateConcentrationRisk(portfolio) {
+  const totalValue = portfolio.reduce((sum, a) => sum + a.value, 0);
+  if (totalValue === 0) return 0;
+
+  const weights = portfolio.map((a) => a.value / totalValue);
+  const hhi = weights.reduce((sum, w) => sum + w ** 2, 0); // Herfindahl-Hirschman Index
+  const concentrationRisk = Math.min(100, hhi * 100); // Scaled for readability (0–100)
+  return concentrationRisk;
+}
+
+// --- Liquidity Risk Calculation Function ---
+async function calculateLiquidityRiskWithMarketCap(id, priceData) {
+  try {
+    // Average daily trading volume (USD)
+    const avgVolume =
+      priceData.total_volumes?.reduce((sum, v) => sum + v[1], 0) /
+        (priceData.total_volumes?.length || 1) || 0;
+
+    // Fetch market cap for this token
+    const marketCapRes = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${id}?localization=false&tickers=false&market_data=true`
+    );
+    const marketCapData = await marketCapRes.json();
+
+    const marketCap = marketCapData.market_data?.market_cap?.usd || 1;
+
+    // Volume-to-MarketCap ratio
+    const volumeToMC = avgVolume / marketCap;
+
+    // Liquidity Risk: inverse of volume-to-MC ratio
+    // Higher ratio = more liquid (lower risk)
+    const liquidityRisk = Math.max(
+      0,
+      Math.min(100, (1 - volumeToMC) * 10000) // scale inversely to 0–100 range
+    );
+
+    return { liquidityRisk, liquidityRatio: volumeToMC };
+  } catch (error) {
+    console.error(`❌ Error calculating liquidity risk for ${id}:`, error);
+    return { liquidityRisk: 50, liquidityRatio: 0 }; // fallback
+  }
+}
+
+// --- Correlation Calculation Function ---
+function calculateCorrelation(arr1, arr2) {
+  const n = Math.min(arr1.length, arr2.length);
+  if (n === 0) return 0;
+
+  const mean1 = arr1.reduce((a, b) => a + b, 0) / n;
+  const mean2 = arr2.reduce((a, b) => a + b, 0) / n;
+
+  const numerator = arr1
+    .slice(0, n)
+    .reduce((sum, val, i) => sum + (val - mean1) * (arr2[i] - mean2), 0);
+
+  const denom1 = Math.sqrt(
+    arr1.slice(0, n).reduce((sum, val) => sum + (val - mean1) ** 2, 0)
+  );
+  const denom2 = Math.sqrt(
+    arr2.slice(0, n).reduce((sum, val) => sum + (val - mean2) ** 2, 0)
+  );
+
+  return denom1 && denom2 ? numerator / (denom1 * denom2) : 0;
+}
+
+// --- Helper: Correlation Risk ---
+function calculateCorrelationRisk(assetReturns) {
+  const symbols = Object.keys(assetReturns);
+  if (symbols.length < 2) return 0; // Not enough assets to compare
+
+  const correlations = [];
+  for (let i = 0; i < symbols.length; i++) {
+    for (let j = i + 1; j < symbols.length; j++) {
+      const r1 = assetReturns[symbols[i]];
+      const r2 = assetReturns[symbols[j]];
+      const corr = calculateCorrelation(r1, r2);
+      correlations.push(corr);
+    }
+  }
+
+  if (correlations.length === 0) return 0;
+
+  const avgCorrelation =
+    correlations.reduce((sum, c) => sum + c, 0) / correlations.length;
+
+  // Scale correlation risk (0 = diversified, 100 = highly correlated)
+  return Math.min(100, Math.max(0, avgCorrelation * 100));
+}
 
 const getRiskMetrics = async (walletAddress, chainId) => {
   const holdingsData = await getHoldings(walletAddress, chainId, "usd");
 
   const portfolio = holdingsData.map((i) => ({
-    symbol: i.symbol, // was contract_ticker_symbol
-    balance: i.amount, // was balance / decimals
-    price: i.currentPrice, // was quote_rate
-    value: i.totalValue, // was quote
+    symbol: i.symbol,
+    balance: i.amount,
+    price: i.currentPrice,
+    value: i.totalValue,
   }));
+
   const metrics = {};
+  const portfolioReturns = {};
   let weightedReturns = [];
   let weightedPrices = [];
 
-  // Process each asset
   for (const asset of portfolio) {
     const id = symbolToIdMap[asset.symbol];
     if (!id) {
@@ -704,7 +804,9 @@ const getRiskMetrics = async (walletAddress, chainId) => {
     const returns = prices.map((p, idx, arr) =>
       idx === 0 ? 0 : (p - arr[idx - 1]) / arr[idx - 1]
     );
+    portfolioReturns[asset.symbol] = returns;
 
+    // Risk metrics per token
     metrics[asset.symbol] = {
       sharpe: calculateSharpe(returns),
       volatility: calculateVolatility(returns),
@@ -715,7 +817,14 @@ const getRiskMetrics = async (walletAddress, chainId) => {
       calmar: calculateCalmar(prices),
     };
 
-    // --- weighted portfolio returns ---
+    // Add liquidity ratio
+    const { liquidityRisk, liquidityRatio } = await calculateLiquidityRiskWithMarketCap(id, priceData);
+
+    metrics[asset.symbol].liquidityRisk = liquidityRisk;
+    metrics[asset.symbol].liquidityRatio = liquidityRatio;
+
+
+    // Weighted portfolio-level data
     const weight = asset.value / portfolio.reduce((s, a) => s + a.value, 0);
     if (weightedReturns.length === 0) {
       weightedReturns = returns.map((r) => r * weight);
@@ -725,13 +834,24 @@ const getRiskMetrics = async (walletAddress, chainId) => {
       weightedPrices = weightedPrices.map((p, i) => p + prices[i] * weight);
     }
   }
+
   if (weightedReturns.length === 0 || weightedPrices.length === 0) {
     console.warn("⚠️ No valid assets found for risk calculation");
     weightedReturns = [0];
     weightedPrices = [1];
   }
 
-  // Aggregate portfolio-level risk metrics
+  // --- Calculate Dynamic Risks ---
+  const correlationRisk = calculateCorrelationRisk(portfolioReturns);
+  const concentrationRisk = calculateConcentrationRisk(portfolio);
+
+  const avgLiquidityRisk =
+    Object.values(metrics).reduce(
+      (sum, m) => sum + (m.liquidityRisk || 0),
+      0
+    ) / Object.keys(metrics).length;
+
+  // --- Portfolio Risk Summary ---
   const portfolioRiskMetrics = {
     sharpeRatio: calculateSharpe(weightedReturns),
     volatility: calculateVolatility(weightedReturns),
@@ -740,18 +860,17 @@ const getRiskMetrics = async (walletAddress, chainId) => {
     var95: calculateVaR(weightedReturns, 0.95),
     sortino: calculateSortino(weightedReturns),
     calmar: calculateCalmar(weightedPrices),
-    // Extra risk distribution (static/dynamic as you like)
-    correlationRisk: 65,
-    concentrationRisk: 78,
-    liquidityRisk: 23,
+    correlationRisk,
+    concentrationRisk,
+    liquidityRisk: avgLiquidityRisk ?? 0,
   };
 
   const totalValue = portfolio.reduce((sum, a) => sum + a.value, 0);
 
   return {
     portfolio,
-    metrics, // per token
-    riskMetrics: portfolioRiskMetrics, // <-- final response for UI
+    metrics,
+    riskMetrics: portfolioRiskMetrics,
     totalValue,
   };
 };
@@ -946,7 +1065,6 @@ const getPortfolioHistory = async (
 
   // ✅ serve from cache if still valid
   if (historyCache[cacheKey] && historyCache[cacheKey].expiry > now) {
-    //console.log("Serving portfolio history from cache:", cacheKey);
     return historyCache[cacheKey].data;
   }
 
@@ -1061,7 +1179,6 @@ app.post("/api/getTransactions", async (req, res) => {
     const { walletAddress } = req.body;
     const { chainId } = req.body || 1;
     const transactions = await getTransactions(walletAddress, chainId);
-    console.log("Transactions fetched:", transactions.length);
     res.json(transactions);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch transactions" });
