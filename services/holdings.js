@@ -6,8 +6,8 @@ const COVALENT_API_KEY= process.env.COVALENT_API_KEY;
 const COVALENT_BASE_URL= process.env.COVALENT_BASE_URL;
 
 const getHoldings = async (walletAddress, chainId, currency = "usd") => {
-    const cacheKey = `${walletAddress}_${chainId}_${currency}`;
-    const now = Date.now();
+    // const cacheKey = `${walletAddress}_${chainId}_${currency}`;
+    // const now = Date.now();
   
     // ✅ Serve cached data if still valid
     // if (holdingsCache[cacheKey] && holdingsCache[cacheKey].expiry > now) {

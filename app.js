@@ -23,6 +23,77 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(cors({ origin: "*" }));
 
+
+async function getSolanaPortfolio(wallet) {
+  try {
+    const range = 90; // days
+    const COVALENT_API_KEY = process.env.COVALENT_API_KEY;
+    const COVALENT_BASE_URL = process.env.COVALENT_BASE_URL;
+
+    // 1️⃣ Fetch wallet SOL balance
+    const covalentRes = await axios.get(
+      `${COVALENT_BASE_URL}/solana-mainnet/address/${wallet}/balances_v2/?key=${COVALENT_API_KEY}`
+    );
+
+    const solBalance =
+      covalentRes.data.data.items.find(
+        (t) => t.contract_ticker_symbol === "SOL"
+      )?.balance / 1e9 || 0; // convert lamports → SOL
+
+    // 2️⃣ Fetch historical SOL prices from CoinGecko
+    const coingeckoRes = await axios.get(
+      `https://api.coingecko.com/api/v3/coins/solana/market_chart?vs_currency=usd&days=${range}&interval=daily`
+    );
+
+    const prices = coingeckoRes.data.prices;
+    if (!prices?.length)
+      throw new Error("No price data returned from CoinGecko.");
+
+    // 3️⃣ Calculate portfolio values (keep last entry per date)
+    const portfolioMap = new Map();
+
+    for (const [timestamp, price] of prices) {
+      const date = new Date(timestamp).toLocaleDateString("en-GB"); // DD/MM/YYYY
+
+      const totalValue = solBalance * price;
+      // Overwrite earlier entries for the same date
+      portfolioMap.set(date, {
+        date,
+        totalValue,
+        pnl: 0,
+        assets: {
+          SOL: {
+            value: totalValue,
+            amount: solBalance,
+            price,
+          },
+        },
+      });
+    }
+
+    const portfolioHistory = Array.from(portfolioMap.values());
+
+    // 4️⃣ Compute daily PnL and percentage change
+    const startValue = portfolioHistory[0]?.totalValue || 0;
+    const portfolioWithPnL = portfolioHistory.map((day, index) => {
+      const pnl = index === 0 ? 0 : day.totalValue - startValue;
+
+      return {
+        date: day.date,
+        totalValue: day.totalValue,
+        pnl: Number(pnl.toFixed(6)),
+        assets: day.assets,
+      };
+    });
+
+    return portfolioWithPnL;
+  } catch (error) {
+    console.error("Error fetching portfolio data:", error.message);
+    throw new Error("Failed to fetch Solana portfolio data");
+  }
+}
+
+
 app.post("/save-email", (req, res) => {
   const { email } = req.body;
   if (!email || typeof email !== "string") {
@@ -657,7 +728,6 @@ const getTransactions = async (walletAddress, chainId) => {
   }
 };
 
-
 const symbolToIdMap = {
   ETH: "ethereum",
   MATIC: "matic-network",
@@ -674,9 +744,8 @@ const symbolToIdMap = {
   ATOM: "cosmos",
   USDC: "usd-coin",
   DAI: "dai",
-  LINK: "chainlink"
+  LINK: "chainlink",
 };
-
 
 // --- Concentration Risk Calculation Function ---
 function calculateConcentrationRisk(portfolio) {
@@ -818,11 +887,11 @@ const getRiskMetrics = async (walletAddress, chainId) => {
     };
 
     // Add liquidity ratio
-    const { liquidityRisk, liquidityRatio } = await calculateLiquidityRiskWithMarketCap(id, priceData);
+    const { liquidityRisk, liquidityRatio } =
+      await calculateLiquidityRiskWithMarketCap(id, priceData);
 
     metrics[asset.symbol].liquidityRisk = liquidityRisk;
     metrics[asset.symbol].liquidityRatio = liquidityRatio;
-
 
     // Weighted portfolio-level data
     const weight = asset.value / portfolio.reduce((s, a) => s + a.value, 0);
@@ -846,10 +915,8 @@ const getRiskMetrics = async (walletAddress, chainId) => {
   const concentrationRisk = calculateConcentrationRisk(portfolio);
 
   const avgLiquidityRisk =
-    Object.values(metrics).reduce(
-      (sum, m) => sum + (m.liquidityRisk || 0),
-      0
-    ) / Object.keys(metrics).length;
+    Object.values(metrics).reduce((sum, m) => sum + (m.liquidityRisk || 0), 0) /
+    Object.keys(metrics).length;
 
   // --- Portfolio Risk Summary ---
   const portfolioRiskMetrics = {
@@ -1221,9 +1288,37 @@ app.post("/api/getCorrelationData", async (req, res) => {
 });
 
 app.post("/api/getPortfolioHistory", async (req, res) => {
-  const { walletAddress, chainId } = req.body;
-  const history = await getPortfolioHistory(walletAddress, chainId);
-  res.json(history);
+  try {
+    const { walletAddress, chainId } = req.body;
+
+    if (!walletAddress || !chainId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required parameters: walletAddress or chainId",
+      });
+    }
+
+    let history = [];
+
+    if (
+      chainId === "solana-mainnet" ||
+      chainId === "solana-devnet" ||
+      chainId === "solana-testnet"
+    ) {
+      history = await getSolanaPortfolio(walletAddress);
+    } else {
+      history = await getPortfolioHistory(walletAddress, chainId);
+    }
+
+    return res.json(history);
+  } catch (error) {
+    console.error("Error fetching portfolio history:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch portfolio history",
+      error: error.message,
+    });
+  }
 });
 
 const ALERTS_FILE = path.join(__dirname, "alerts.json");
