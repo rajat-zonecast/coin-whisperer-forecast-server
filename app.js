@@ -23,10 +23,9 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(cors({ origin: "*" }));
 
-
 async function getSolanaPortfolio(wallet) {
   try {
-    const range = 90; // days
+    const range = 365; // days
     const COVALENT_API_KEY = process.env.COVALENT_API_KEY;
     const COVALENT_BASE_URL = process.env.COVALENT_BASE_URL;
 
@@ -92,7 +91,6 @@ async function getSolanaPortfolio(wallet) {
     throw new Error("Failed to fetch Solana portfolio data");
   }
 }
-
 
 app.post("/save-email", (req, res) => {
   const { email } = req.body;
@@ -1203,9 +1201,9 @@ const getPortfolioHistory = async (
 app.post("/api/getPortfolio", async (req, res) => {
   try {
     const { walletAddress, chainId } = req.body;
+
     if (!walletAddress)
       return res.status(400).json({ error: "Wallet address is required" });
-
     const holdings = await getHoldings(walletAddress, chainId, "usd");
 
     // Portfolio totals
