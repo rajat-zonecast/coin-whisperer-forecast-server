@@ -98,7 +98,6 @@ async function handlePriceAlert(alert, io) {
   }
 
   if (triggered) {
-    console.log(`[ PRICE ALERT ] ${message}`);
     io.emit("priceAlert", { asset, message, address: alert.walletAddress });
   }
 }
@@ -128,7 +127,6 @@ async function handlePairAlert(alert, io) {
   }
 
   if (triggered) {
-    console.log(`[ PAIR ALERT ] ${message}`);
     io.emit("pairAlert", { asset, message, address: alert.walletAddress });
   }
 }
@@ -157,7 +155,6 @@ async function handleVolumeAlert(alert, io) {
   }
 
   if (triggered) {
-    console.log(`[ VOLUME ALERT ] ${message}`);
     io.emit("volumeAlert", { asset, message, address: alert.walletAddress });
   }
 }
@@ -187,14 +184,12 @@ async function handlePortfolioAlert(alert, io) {
   }
 
   if (triggered) {
-    console.log(`[ PORTFOLIO ALERT ] ${message}`);
     io.emit("portfolioAlert", { asset, message, address: alert.walletAddress });
   }
 }
 
 // ---------- Cron Job ----------
 const cronAlert = cron.schedule("0 * * * *", async function () {
-  console.log("🕒 Running alert cron job...");
 
   // This function will receive `app` from main file
   const app = cronAlert.app;
@@ -237,7 +232,6 @@ const cronAlert = cron.schedule("0 * * * *", async function () {
 });
 
 function startCron(app) {
-  console.log("cron started");
   cronAlert.app = app;
   cronAlert.start();
   console.log("🚀 Cron job started successfully.");

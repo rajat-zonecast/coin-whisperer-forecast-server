@@ -34,6 +34,8 @@ async function getSolanaPortfolio(wallet) {
       `${COVALENT_BASE_URL}/solana-mainnet/address/${wallet}/balances_v2/?key=${COVALENT_API_KEY}`
     );
 
+    console.log('Covalent Response:', covalentRes.data);
+
     const solBalance =
       covalentRes.data.data.items.find(
         (t) => t.contract_ticker_symbol === "SOL"
@@ -43,6 +45,8 @@ async function getSolanaPortfolio(wallet) {
     const coingeckoRes = await axios.get(
       `https://api.coingecko.com/api/v3/coins/solana/market_chart?vs_currency=usd&days=${range}&interval=daily`
     );
+
+    console.log('CoinGecko Response:', coingeckoRes.data);
 
     const prices = coingeckoRes.data.prices;
     if (!prices?.length)
@@ -1129,16 +1133,18 @@ const getPortfolioHistory = async (
   const now = Date.now();
 
   // ✅ serve from cache if still valid
-  if (historyCache[cacheKey] && historyCache[cacheKey].expiry > now) {
-    return historyCache[cacheKey].data;
-  }
-
+  // if (historyCache[cacheKey] && historyCache[cacheKey].expiry > now) {
+  //   return historyCache[cacheKey].data;
+  // }
+  console.log('portfolio history triggered')
   try {
     const res = await fetch(
       `${COVALENT_BASE_URL}/${chainId}/address/${walletAddress}/portfolio_v2/?key=${COVALENT_API_KEY}&quote-currency=${currency}`
     );
 
     const result = await res.json();
+    console.log("Portfolio history URL:", `${COVALENT_BASE_URL}/${chainId}/address/${walletAddress}/portfolio_v2/?key=${COVALENT_API_KEY}&quote-currency=${currency}`);
+    console.log("Portfolio history result:", result);
     if (!result?.data?.items || result.data.items.length === 0) return [];
 
     // Take all tokens’ history
@@ -1184,10 +1190,10 @@ const getPortfolioHistory = async (
     });
 
     // ✅ save to cache
-    historyCache[cacheKey] = {
-      data: mappedHistory,
-      expiry: now + CACHE_History,
-    };
+    // historyCache[cacheKey] = {
+    //   data: mappedHistory,
+    //   expiry: now + CACHE_History,
+    // };
 
     return mappedHistory;
   } catch (error) {
@@ -1303,8 +1309,10 @@ app.post("/api/getPortfolioHistory", async (req, res) => {
       chainId === "solana-devnet" ||
       chainId === "solana-testnet"
     ) {
+      console.log('solana portfolio history triggered')
       history = await getSolanaPortfolio(walletAddress);
     } else {
+      console.log('non solana portfolio history triggered')
       history = await getPortfolioHistory(walletAddress, chainId);
     }
 
