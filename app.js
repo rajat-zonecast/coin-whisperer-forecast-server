@@ -23,76 +23,144 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(cors({ origin: "*" }));
 
+let backupPortfolioCache = {};
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+function getBackupData(cacheKey) {
+  if (backupPortfolioCache[cacheKey]) {
+    console.log("⚠️ Using backup cached data due to failure");
+    return backupPortfolioCache[cacheKey];
+  }
+
+  console.log("❌ No backup data available");
+  return [];
+}
+
+function setBackupData(cacheKey, data) {
+  backupPortfolioCache[cacheKey] = data;
+}
+
+// Cache object stored in memory
+let coinGeckoSolanaCache = {
+  timestamp: 0,
+  data: null,
+};
+
+const SOLANA_CACHE_TTL = 1000 * 60 * 60; // 1 HOUR
+
 async function getSolanaPortfolio(wallet) {
+  const cacheKey = `${wallet}_solana`;
+
   try {
-    const range = 365; // days
+    const range = 365;
     const COVALENT_API_KEY = process.env.COVALENT_API_KEY;
     const COVALENT_BASE_URL = process.env.COVALENT_BASE_URL;
 
-    // 1️⃣ Fetch wallet SOL balance
-    const covalentRes = await axios.get(
-      `${COVALENT_BASE_URL}/solana-mainnet/address/${wallet}/balances_v2/?key=${COVALENT_API_KEY}`
-    );
+    console.log("Cache timestamp:", coinGeckoSolanaCache.timestamp);
 
-    console.log('Covalent Response:', covalentRes.data);
+    // Fetch wallet balance
+    let covalentRes;
+
+    // withTimeout function is used that if API takes more than 1 minute then it will return cached data and cancel the api call
+    try {
+      covalentRes = await withTimeout(
+        axios.get(
+          `${COVALENT_BASE_URL}/solana-mainnet/address/${wallet}/balances_v2/?key=${COVALENT_API_KEY}`
+        ),
+        60000 // 1-minute timeout
+      );
+    } catch (err) {
+      console.log("⚠️ Covalent failed or timeout:", err.message);
+
+      throw new Error("Failed to fetch Solana balance (Covalent timeout)");
+    }
 
     const solBalance =
       covalentRes.data.data.items.find(
         (t) => t.contract_ticker_symbol === "SOL"
-      )?.balance / 1e9 || 0; // convert lamports → SOL
+      )?.balance / 1e9 || 0;
 
-    // 2️⃣ Fetch historical SOL prices from CoinGecko
-    const coingeckoRes = await axios.get(
-      `https://api.coingecko.com/api/v3/coins/solana/market_chart?vs_currency=usd&days=${range}&interval=daily`
-    );
+    // Fetch prices (cached)
+    const now = Date.now();
 
-    console.log('CoinGecko Response:', coingeckoRes.data);
+    if (
+      coinGeckoSolanaCache.data &&
+      now - coinGeckoSolanaCache.timestamp < SOLANA_CACHE_TTL
+    ) {
+      console.log("♻️ Using cached CoinGecko data");
+    } else {
+      console.log("🌐 Fetching fresh CoinGecko data");
+      try {
+        const coingeckoRes = await withTimeout(
+          axios.get(
+            `https://api.coingecko.com/api/v3/coins/solana/market_chart?vs_currency=usd&days=${range}&interval=daily`
+          ),
+          60000 // 1 -minute timeout
+        );
 
-    const prices = coingeckoRes.data.prices;
+        coinGeckoSolanaCache = {
+          timestamp: now,
+          data: coingeckoRes.data,
+        };
+      } catch (err) {
+        console.log("⚠️ CoinGecko timeout or failure:", err.message);
+      }
+    }
+
+    const prices = coinGeckoSolanaCache.data.prices;
     if (!prices?.length)
       throw new Error("No price data returned from CoinGecko.");
 
-    // 3️⃣ Calculate portfolio values (keep last entry per date)
+    // Build chart data
     const portfolioMap = new Map();
-
     for (const [timestamp, price] of prices) {
-      const date = new Date(timestamp).toLocaleDateString("en-GB"); // DD/MM/YYYY
-
+      const date = new Date(timestamp).toLocaleDateString("en-GB");
       const totalValue = solBalance * price;
-      // Overwrite earlier entries for the same date
+
       portfolioMap.set(date, {
         date,
         totalValue,
         pnl: 0,
         assets: {
-          SOL: {
-            value: totalValue,
-            amount: solBalance,
-            price,
-          },
+          SOL: { value: totalValue, amount: solBalance, price },
         },
       });
     }
 
     const portfolioHistory = Array.from(portfolioMap.values());
-
-    // 4️⃣ Compute daily PnL and percentage change
     const startValue = portfolioHistory[0]?.totalValue || 0;
-    const portfolioWithPnL = portfolioHistory.map((day, index) => {
-      const pnl = index === 0 ? 0 : day.totalValue - startValue;
 
-      return {
-        date: day.date,
-        totalValue: day.totalValue,
-        pnl: Number(pnl.toFixed(6)),
-        assets: day.assets,
-      };
-    });
+    const finalResult = portfolioHistory.map((day, index) => ({
+      date: day.date,
+      totalValue: day.totalValue,
+      pnl: index === 0 ? 0 : Number((day.totalValue - startValue).toFixed(6)),
+      assets: day.assets,
+    }));
 
-    return portfolioWithPnL;
+    // Save fresh success result
+    setBackupData(cacheKey, finalResult);
+
+    return finalResult;
   } catch (error) {
-    console.error("Error fetching portfolio data:", error.message);
-    throw new Error("Failed to fetch Solana portfolio data");
+    console.error("Error fetching Solana portfolio:", error.message);
+
+    // Return previous backup data
+    return getBackupData(cacheKey);
   }
 }
 
@@ -1120,31 +1188,23 @@ const getCorrelationData = async (walletAddress) => {
   return [{ asset1: "BTC", asset2: "ETH", correlation: 0.85 }];
 };
 
-// Placeholder: No direct Amberdata API for Portfolio History
-const historyCache = {};
-const CACHE_History = 1000 * 60 * 60 * 5; // ✅ 5 hours
-
 const getPortfolioHistory = async (
   walletAddress,
   chainId,
   currency = "usd"
 ) => {
   const cacheKey = `${walletAddress}_${chainId}_${currency}`;
-  const now = Date.now();
 
-  // ✅ serve from cache if still valid
-  // if (historyCache[cacheKey] && historyCache[cacheKey].expiry > now) {
-  //   return historyCache[cacheKey].data;
-  // }
-  console.log('portfolio history triggered')
+  // withTimeout function is used that if API takes more than 1 minute then it will return cached data and cancel the api call
   try {
-    const res = await fetch(
-      `${COVALENT_BASE_URL}/${chainId}/address/${walletAddress}/portfolio_v2/?key=${COVALENT_API_KEY}&quote-currency=${currency}`
+    const res = await withTimeout(
+      fetch(
+        `${COVALENT_BASE_URL}/${chainId}/address/${walletAddress}/portfolio_v2/?key=${COVALENT_API_KEY}&quote-currency=${currency}`
+      ),
+      60000 // 1 minute timeout
     );
 
     const result = await res.json();
-    console.log("Portfolio history URL:", `${COVALENT_BASE_URL}/${chainId}/address/${walletAddress}/portfolio_v2/?key=${COVALENT_API_KEY}&quote-currency=${currency}`);
-    console.log("Portfolio history result:", result);
     if (!result?.data?.items || result.data.items.length === 0) return [];
 
     // Take all tokens’ history
@@ -1189,16 +1249,15 @@ const getPortfolioHistory = async (
       };
     });
 
-    // ✅ save to cache
-    // historyCache[cacheKey] = {
-    //   data: mappedHistory,
-    //   expiry: now + CACHE_History,
-    // };
+    // Cache the result
+    setBackupData(cacheKey, mappedHistory);
 
     return mappedHistory;
   } catch (error) {
     console.error("Error fetching portfolio history:", error);
-    return [];
+
+    // If API call fails, return previous cached data for efficient user experience
+    return getBackupData(cacheKey);
   }
 };
 
@@ -1309,10 +1368,8 @@ app.post("/api/getPortfolioHistory", async (req, res) => {
       chainId === "solana-devnet" ||
       chainId === "solana-testnet"
     ) {
-      console.log('solana portfolio history triggered')
       history = await getSolanaPortfolio(walletAddress);
     } else {
-      console.log('non solana portfolio history triggered')
       history = await getPortfolioHistory(walletAddress, chainId);
     }
 
